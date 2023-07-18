@@ -1,1 +1,18 @@
-# regresyon-analizi
+# Regression Analysis on 'Bones Data'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,714 @@
+---
+title: "bone"
+author: "ilaydacelik"
+date: "07 01 2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Önce gerekli fonksiyonlarımızı indiriyoruz.
+```{r}
+install.packages("dplyr")
+library(ggplot2)
+library(dplyr)
+library(broom)
+library(ggpubr)
+library(ISLR)
+```
+
+
+#İnceleyeceğimiz veri seti,"Serum Ürik Asit düzeyleri ile Osteoporoz riski arasındaki
+Doğrusal Olmayan İlişki: Retrospektif Bir Çalışma" adlı makalenin orijinal verileridir ve
+klinik taban çizgisi verileri ve çift enerjili X-ışını ölçüm sonuçları içerir.
+```{r}
+bone<-read.csv("C:/Users/ilayd/OneDrive/Masaüstü/bone.csv")
+View(bone)
+```
+#Veri setimizi incelediğimizde sırayla cinsiyet,yaş,boy,ağırlık,BMI(vücut kütle endeksi),
+#L1.L4(kemik yoğunluğu),CREA(keratin),birçok vitamin ve laboratuvar terimlerinin değişkenleri yer almaktadır.
+
+
+#Veri setimizde biraz oynama yapacak olursak örneğin; Cinsiyet(Gender) kısmında 
+#veriler sadece 1 ve 2 olarak ayrılmış. Biz buradan sadece '2' olanları listelemek istersek;
+```{r}
+bone11<-bone[bone$Gender=="2",]
+nrow(bone11)
+
+```
+#Görüldüğü üzere 'Gender' içerisinden 592 tanesi bizim aradığımız olan '2' cinsiyetinde.
+
+
+#Bunların sütun isimlerini görmek istersek şu fonksiyonla görebiliriz:
+```{r}
+names(bone11)
+```
+
+
+#Verimize geri dönecek olursak, istediğimiz değişkenleri içerecek şekilde veriyi
+#düzenleyebiliriz.'Gender' olarak sadece '2'yi tercih ettik. Tahmin etmek istediğimiz
+#değişkeni 'Weight' olarak seçelim.Bağımsız değişkenleri de Age,BMI,L1.4,URIC ve ALT olarak
+#veriyi düzenleyelim.
+```{r}
+bone11<- bone11[c("Weight","Age","BMI","L1.4","URIC","ALT")]
+View(head(bone11))
+```
+
+
+
+#Değişkenler arasında nasıl bir ilişkinin olduğunu görmek için;
+```{r}
+cor(bone11)
+```
+
+#Veride NA değerleri gözükmektedir. Bunları düzeltelim;
+```{r}
+cor(na.omit(bone11))
+```
+
+#Korelasyon matrisi incelendiğinde bağımlı değişken (Weight) ile bağımsız değişkenler #arasındaki ilişkilerin çoğu pozitif yönlü görünüyor. 
+#Bunun yanı sıra çoklu doğrusal regresyonda dikkat edilmesi gereken bir nokta da bağımsız #değişkenlerin kendi aralarında ilişkili olma durumları.Yukarıdaki matrisimizi #incelediğimizde bağımsız değişkenler ile bağımlı değişken arasında
+#az bir oran da olsa aralarında ilişki olduğu görülmektedir. Bu da bize 
+#istemediğimiz sorun olan multicolinerty sorununu işaret eder. 
+
+#Matrisi incelediğimizde benim dikkatimi çeken birkaç detay var. Bunlardan ilki 
+#bağımlı değişkenimiz Weight ile BMI bağımsız değişkeninin 0,869106616 ile birbirleriyle 
+#ne kadar ilişkili olduğu.Bu çok yüksek bir oran eğer burada bağımsız değişkenlerden
+#bahsediyorsak bu oranın daha düşük olması gerekir.
+
+
+#Değişkenler arasındaki ilişkiyi görsel olarak inceleyelim.
+```{r}
+pairs(na.omit(bone11),pch=19)
+```
+#Bu şekilde değişkenler arasındaki ilişki daha rahat gözüküyor.
+
+
+
+#Veriyi incelediğimizde, veri içerisinde kayıp gözlemler olduğu görülmektedir. Bu noktada #kayıp gözlemleri işlem dışı bırakmak yerine doldurma işlemi yapabiliriz.Bunun için 'mice'
+#fonksiyonunu kullanabiliriz.
+#Kayıp gözlemler için mice paketinden yararlandıktan sonra md.pattern() komutu ile de 
+#veride hangi değişkenlerde kaç tane NA değeri olduğunu görebiliriz.
+
+
+```{r}
+library(mice)
+md.pattern(bone11)
+```
+#Yukarıdaki grafiği inceleyelim. 577 gözlemden NA değeri bulunmamakla beraber
+#15 gözlem içerisinde Weight değişkeninde 3 tane NA değeri,
+#15 gözlem içerisinde Age değişkeninde 3 tane NA değeri,
+#ve yine 15 gözlem içerisinde BMI değişkeninde 3 tane NA değeri bulunmaktadır.
+#Totalde ise verimizde 45 tane NA değeri vardır. Bu değerleri doldurma 
+#işlemine geçersek;
+
+
+```{r}
+?mice()
+imputed<-mice(bone11,m=5)
+```
+
+#m imputed sayısını verir.
+#Sonuçları incelediğimizde veride totalde 45 tane NA olduğu görülür. 
+#Şu an eksik verileri tanımladık.Bu işleme de 'imputation' işlemi denir.
+
+```{r}
+names(imputed)
+```
+#Burada paketin atadığı değerleri ve farklı değerleri görebilmek için 
+#namesleri yazdırdık.
+
+```{r}
+imputed$imp
+```
+
+#Sonuçlarda herbir değişkeni için imput edilmiş değerler görülmektedir.
+#Bunlardan istediğimiz birini uygun olan değer ile doldurma işlemini gerçekleştirebiliriz. #Varsayalım ki; 5. değerler ile doldurucağız;
+
+```{r}
+bone11_Imp<-complete(imputed,5)
+View(bone11_Imp)
+md.pattern(bone11_Imp)
+```
+#Görüldüğü gibi kayıp gözlemler ortadan kalktı ve veri setimiz 
+#eksiksiz oldu. Burada 5.değer yerine 1,2,3 ile de doldurabilirdik.
+#Yine aynı şekilde eksiksiz olacaktır.
+
+
+
+                                 #MODEL OLUŞTURMA
+                                 
+#Veri setini eğitim ve test olarak iki parçaya bölelim;
+```{r}
+set.seed(123)
+sampleIndex<-sample(1:nrow(bone11_Imp),size=0.7*nrow(bone11_Imp))
+View(sampleIndex)
+```
+#Bu işlemde veri setini %70 test, %30 eğitim olacak şekilde ikiye ayırdık.
+
+```{r}
+trainset<-bone11_Imp[sampleIndex,]
+testset<-bone11_Imp[-sampleIndex,]
+View(trainset)
+```
+
+#Şimdi modelimizi oluşturalım.
+```{r}
+names(bone11_Imp)
+```
+#Burada tahmin etmek istediğimiz 'Weight' değişkeniyle diğer seçtiğimiz bağımsız #değişkenleri listeledik.
+
+
+```{r}
+model1<-lm(Weight~Age+BMI+L1.4+
+            URIC+ALT,data=trainset)
+summary(model1)
+```
+
+#Sonuçlar incelendiğinde modelin R2=0.80 olarak elde edilmiştir. 
+#Testleri istediğimiz gibi ayırabilirdik önce %80-%20 olarak denedim ama
+#R2=0,79 çıkmıştı. Bizim amacımız testimizi maksimum düzeyde anlamlı kılmak. 
+#O yüzden %70-%30 olarak ayırdığımızda R2 daha yüksek çıktığı için bu şekilde
+#yaptım.
+#Ayrıca modelimiz anlamlı çıkmıştır (p<2.2e−16). Değişkenleri anlamlılıkları 
+#incelenirse URIC VE ALT değişkenleri anlamlı görünmemektedir. 
+#Cor sonuçlarında da bağımlı ile bu değişkenler arasındaki ilişki düşük çıkmıştı. #Dolayısıyla bu değişkenleri modelden çıkararak yeni bir model oluşturulabiliriz.
+#Ben sadece ALT değişkenini modelden çıkardım.
+
+
+```{r}
+model2<-lm(Weight~Age+BMI+URIC+L1.4,data=trainset)
+model2
+```
+
+```{r}
+summary(model2)
+```
+
+#Model2 sonuçları değerlendirildiğinde R2 değerinde belirgin bir artış yoktur.Çok 
+#küçük miktarda olmuştur. Ve oluşturulan model yine anlamlıdır. Katsayılara
+#baktığımız zaman da model katsayılarında birinin artışı diğerinin düşüşüne
+#veya tam tersi birinin düşüşü diğerinin artışına neden oluyor.
+
+
+
+#AIC ve BIC değerlendirmelerini yaptıktan sonra hangi değer daha iyi onu belirleyeceğiz.
+#AIC ve BIC karışımlı model için yaygın olarak kullanılan uyum ölçütleridir. 
+#En küçük uyum ölçütüne sahip model en iyi model olarak kabul edilmektedir.
+
+
+
+```{r}
+AIC(model1,k=8)
+```
+```{r}
+AIC(model2,k=7)
+```
+
+```{r}
+BIC(model1)
+```
+
+```{r}
+BIC(model2)
+```
+
+#AIC ve BIC değerlendirme ölçütlerine göre model2 daha iyi görünmektedir.
+#Bu durumu birde plot üzerinden inceleyelim;
+
+```{r}
+plot(model2)
+```
+#İlk tabloda değişen bir varyans sorunu olabileceği göze çarpmaktadır. Test sonuçları #istediğimiz kadar, tabloda belirgin bir şekilde gözükmüyor. Test sonuçlarıyla değişen 
+#varyans sorunu olup olmadığını inceleyeceğiz. 
+
+#İkinci grafikte artıkların normal dağılıp dağılmadığı incelenmektedir.
+#Çoğunluğu normal dağılmakta ama bazı değelerler aykırı olarak çok net bir 
+#şekilde görülüyor.
+
+#Üçüncü grafikte standartlaştırılmış artıkları inceliyoruz. Burada 3.grafikteki 
+#aykırılar daha net yer alıyor. 
+
+#Son grafik ise baskınlık grafiğidir. Ama çoğu artığın benzer etkiye sahip 
+#olmadığı ayrıca cook distance çizgileri de incelendiğinde belirgin 
+artıkların olduğu gözleniyor. Bu durumları daha detaylı incelemeliyiz.
+
+
+#Eğer veride değişen varyans olup olmadığı daha detaylı incelenirse;
+#Sabit varyans varsayımını yakından incelemek istersek;
+
+
+#Değişen varyansın tespitinde sıklıkla kullanılan testlerden biri Breusch-Pagan testidir. #Bu testi yapmak için gerekli paket yüklenmelidir.
+```{r}
+library(lmtest)
+```
+#test #HO:Heteroscedasticity is not present #H1:Heteroscedasticity is present
+```{r}
+bptest(model2)
+```
+#Sonuçlar değerlendirildiğinde sabit varyans durumunun olmadığı Breuch−PaganTesti 
+#sonucunda görülmüştür.Bu gibi durumlarda değişen varyansa eşlik eden nonlineearity 
+#durumu(doğrusal olmayan) da varsa değişken dönüşümü yapmak uygun olacaktır.Eğer sadece değişen 
+#varyans söz konusu ise ağırlıklandırılmış en küçük kareler yöntemi uygun olabilir.
+
+#Pratikte grafikler üzerinden bir ilişki tahmin edilmeye çalışılır.Ve ona göre dönüşüm #yapılır.Bazen iyi bir dönüşüm bulmak zor olabilir. Bu noktada henüz aykırı tespiti #yapılmadığı için aykırı tespitinden sonra değişen varyans durumu yeniden incelenip #düzelmemiş ise gerekli işlemler yapılmalıdır.
+
+Model değerlendirme matrislerini test verisi üzerinden inceleyelim; 
+#Burada öncelikle model2 oluşturulurken çıkardığımız değişkeni testset içerisinden
+#de çıkarmalıyız.
+
+```{r}
+testset2<-testset[-6] 
+predictions<-predict(model2,testset2)
+head(predictions)
+```
+#Veri seti içerisinde ALT değişkeni 6.sırada yer aldığı için -6 dedik.
+
+
+
+Model2 den elde edilen tahminler görülmektedir.Şimdi metrikler incelenirse;
+```{r}
+install.packages("caret")
+library(caret)
+R2(predictions,testset2$Weight) 
+```
+
+#Tahmin etmek istediğimiz değer için R2;
+```{r}
+R2(predictions,testset2$Weight) 
+```
+
+#Tahmin etmek istediğimiz değer için ortalama kök sapması;
+```{r}
+RMSE(predictions,testset2$Weight)
+```
+#Tahmin etmek istediğimiz değer için ortalama mutlak hata;
+```{r}
+MAE(predictions,testset2$Weight)
+```
+
+
+                                #AYKIRI DEĞER KONTROLÜ 
+                                
+#Aykırı değer kontrolünü cook distance yöntemiyle inceleyeceğiz.
+#Cook distance,en küçük kareler regresyon analizi gerçekleştirirken bir veri 
+#noktasının etkisinin yaygın olarak kullanılan bir tahminidir.
+
+#Cook's Distance, gözlem kaldırıldığında regresyon modelinin ne kadar 
+#değiştiğinin bir özetidir.
+```{r}
+dist<-cooks.distance(model1)
+head(dist)
+```
+
+```{r}
+olcut1<- mean(dist)*3
+olcut2<-4/length(dist)
+olcut1;olcut2
+```
+
+#Her iki değerde birbirine oldukça yakın görünmektedir.Ama cook distancle 
+#değerleri genelde küçük olduğundan bu fark önemli de olabilir.Her iki olcut 
+#içinde ayrı ayrı işlem yaparsak; Aykırı olan gözlemlerin indexlerini elde edelim; 
+```{r}
+olcut1Index<-which(dist>olcut1)
+olcut2Index<-which(dist>olcut2)
+length(olcut1Index)
+```
+```{r}
+length(olcut2Index)
+```
+#Ölçüt1’e göre 26, ölçüt2’ye göre de 24 tane aykırı değerin var olduğu tespit 
+#edilmiştir.Bu noktada aralarından bir tanesi seçilerek model oluşturmak istersek;
+#Ölçütt1 olsun; Görsel olarakta cook disatncleri incelersek;
+```{r}
+plot(1:length(dist),dist,type='p',ylim=range(dist)*c(1,1))
+```
+
+#Daha detaylı bakacak olursak;
+```{r}
+plot(1:length(dist),dist,type='p',ylim=range(dist)*c(1,0.001))
+```
+
+#Yukarıda görünenlerin bir kısmı cook distance' a göre aykırı değerdir. 
+#Şimdi veri içerisinde bulunan bu aykırı değerleri, trainset içerisinden çıkaralım.
+
+
+
+```{r}
+trainsetrem<-trainset[-olcut1Index,]
+nrow(trainset)
+```
+
+```{r}
+nrow(trainsetrem)
+```
+
+#Görüldüğü üzere aykırı değerleri cook distance ile çıkardıktan sonra
+#trainset değerimiz arttı.
+
+
+
+                          #MODEL KARŞILAŞTIRMASI 
+#Şimdi aykırı değerelerden arınmıs veri ile yeni bir model oluşturup bunu 
+#model2 ile karşılaştırabiliriz.
+
+
+```{r}
+model3<-lm(Weight~Age+BMI+L1.4
+             +URIC,data=trainsetrem)
+model3
+```
+
+```{r}
+summary(model3)
+```
+
+
+
+```{r}
+summary(model2)
+```
+#Görüldüğü üzere yeni modelimiz olan model3 'te R2 değerimiz gözle görülür
+#bir şekilde arttı. Ayrıca bağımsız değerlerimizin de anlamlılığı artmış oldu. 
+
+```{r}
+bptest(model3)
+```
+#NOT
+#Eğer burada p-value değerimiz 0.05'ten küçük çıksaydı EKK yöntemi uygulamamız 
+#gerekecekti. 
+
+
+```{r}
+plot(model3)
+```
+#Değişen varyans durumu yeniden test ile kontrol edildiğinde bu sorunun şuan var 
+#olmadığı görülmektedir.
+
+Her iki model de karşılaştırıldığında R2 ve $Resudual Standart Error  değerleri
+#bakımında model3 daha iyi görünmektedir.Ama bu sonuçlar trainset üzerinden elde #edilmiştir. Bu durumun test set üzerinden de gösterilmesi gerekmektedir.
+
+
+```{r}
+AIC(model3,k=7)
+```
+
+```{r}
+AIC(model2,k=7)
+```
+```{r}
+BIC(model3)
+```
+```{r}
+BIC(model2)
+```
+AIC ve BIC kriterleri de değerlendirildiğinde de bu sefer model2’nin daha iyi 
+#olduğu görülmektedir.Test set üzerinden model değerlendirmesi yaparsak;
+
+```{r}
+predictions3<-predict(model3,testset2)
+R2(predictions3,testset2$Weight)
+```
+```{r}
+RMSE(predictions3,testset2$Weight)
+```
+```{r}
+MAE(predictions3,testset2$Weight)
+```
+#Karşılaştırma için model2'nin sonuçları;
+```{r}
+predictions2<-predict(model2,testset2)
+R2(predictions2,testset2$Weight)
+```
+```{r}
+RMSE(predictions2,testset2$Weight)
+```
+
+```{r}
+MAE(predictions2,testset2$Weight)
+```
+#Sonuçları değerlendirirsek, model2 ile model3 arasında testset üzerinden belirgin bir fark #görülmemektedir.MAE değerinde çok ufak bir farkla model2 daha iyidir.
+#RMSE değerinde model3 daha iyidir.Totale bakacak olursak; son oluşturalan modelin
+#gerek veri ön işlemesi yapıldığında gerekse varsayımlar kontrol edildiğinde daha 
+#iyi olduğu düşünülebilir. Bu fark test verisi üzerinden incelendiğinde belirgin
+#bir şekilde ortaya konulmuş olmasa da (bu durum cross validation ile yeniden gözden #geçirilmelidir.) eğitim verisinde daha iyi sonuç verdiği gözlenmiştir.
+
+#Bu noktada bir diğer varsayım olan Multicolinearity incelenmelidir.
+
+
+
+
+                               #ÇOKLU BAĞLANTI SORUNU 
+#Genel anlamda bağımsız değişkenler birbirleriyle yüksek dereceli olarak 
+#ilişkili iseler bu durumda çoklu bağlantı sorunu ile karşılaşılabilir.
+#Bunu belirlemek için öncelikle cor matrisi incelenebilir ve VIF değerleri #değerlendirilmelidir.       
+
+#NOT 
+#Bağımsız değişkenlere ilişkin korelasyon matrisinin tersinin köşegen öğelerine
+#VIF denir. VIF bir bağımsız değişkenin diğer bağımsız değişkenlerle olan ilişkisinin #derecesini belirlemek için hesaplanır. VIF 10'a eşit veya daha büyük ise, çoklu doğrusal #bağıntı problemi mevcuttur.
+
+                                         
+```{r}
+library(car)
+vif(model3)
+```
+                                       
+#Yukarıda da belirttiğimiz gibi VIF>10 olduğunda çoklu bağlantı sorunu 
+#vardır bizim değerlerimizin hepsi 10'dan küçük olduğu için çoklu bağlantı 
+#sorunumuz yoktur.
+
+
+
+                        #TEST SETİ ÜZERİNDE MODEL DEĞERLENDİRME
+
+#Bu başlığımızı da geçiyorum çünkü burada VIF değerleriyle test ediliyor. Bizim 
+#modelimiz düzgün çıkıtğı için VIF değerlerine gerek kalmadı. 
+#Diğer halini de üstlerde test etmiştik zaten.
+
+
+
+
+
+                               #İLİŞKİLİ HATALAR 
+
+#Bu ilişkinin keşfedilmesi çok kolay değildir.Çünkü ilişkinin (korelasyonun)
+#çok farklı tipleri mevcuttur. Ancak bazı veri yapılarında hatalar arasında
+#korelasyon olması durumu daha sık rastlanılan bir durumdur.Zaman serilerinde,
+#mekansal verilerde ve panel verilerde bu durum özellikle incelenmelidir.
+
+#Otokorelasyon durumunda parametrelerin en küçük kareler tahmincileri(EKK) 
+#sapmasız ve tutarlı olup, etkin değildir. Hata teriminin varyansının tahmincisi 
+#sapmalıdır ve bu yüzden parametrelerin varyansları da sapmalı olur. Pozitif 
+#otokorelasyon varsa sapma negatif olur. Yani varyanslar olduğundan küçük bulunur.
+#Bunun sonucunda t test istatistiği değeri büyük çıkar. Böylece anlamsız bir katsayının #anlamlı olma olasılığı artar. R2 de yükselir. Dolayısıyla F değeri olduğundan büyük #bulunur. Sonuç olarak t ve F testleri güvenilirliğini yitirip yanıltıcı sonuç verirler.
+
+#Hata terimleri arasındaki otokorelasyonun varlığı genel olarak aşağıdaki ana 
+#nedenlere dayanmaktadır;
+
+# 1- Modele bazı açıklayıcı değişkenlerin alınmaması
+# 2- Modelin matematiksel kalıbının yanlış seçilmesi
+# 3- Bağımlı değişkenin ölçme hatalı olması
+# 4- Verilerin sistematik incelenmesi
+
+
+#Eğer hatalar arasında ilişki yoksa hataların ε=0 doğrusu etrafında rastgele
+#dağılması gerekir.Daha iyi inceleyebilmek için,εiˆ ile εi+1ˆ lerin scatter
+#graphını inceleyelim.
+
+
+```{r}
+n <- length(residuals(model3))
+plot(tail(residuals(model3),n-1) ~ head(residuals(model3),n-1), xlab=
+expression(hat(epsilon)[i]),ylab=expression(hat(epsilon)[i+1]))
+abline(h=0,v=0,col=grey(0.75))
+```
+
+#Grafiği incelediğimizde gözlemlenen değerlerin birbirine pek de benzemediğini 
+görüyoruz yani başka bir deyişle burada bir otokorelasyon sorunu vardır.
+
+
+#Bu durum farklı şekillerle de desteklenebilir. istatistiksel olarak incelemek 
+#istersek; εi+1ˆ ile εiˆlar arasında bir regresyon modeli kurup modelin anlamlılığını #inceleyebiliriz.Beklentimiz bu modelin anlamlı olmamasıdır.
+
+
+```{r}
+summary(lm(tail(residuals(model3),n-1) ~ head(residuals(model3),n-1) -1))
+```
+
+#Artıkların ortalaması sıfır olduğu için kesişim terimini çıkardık.Görüldüğü
+#üzere bu model anlamlı değildir. Yani iki tip residual arasında doğrusal 
+#ilişki söz konusu değildir.
+
+```{r}
+require(lmtest)
+dwtest(Weight~Age+BMI+L1.4+
+             URIC,data=trainsetrem)
+```
+#Burda H0 hipotezi hatalar arasında korelasyon yoktur şeklinde kurulur. pvalue
+#değerlendirildiğinde H0 hipotezi red edilemez.Yani hatalar arasında korelasyon 
+#olmadığı görülür.Ayrıca hesaplanan d değeri 0 ile 4 arasında değer almaktadır. 
+#2 değerine yakın elde edilen d değeri otokorelasyon olmadığına işaret eder.
+#0’a yakın değer alması pozitif otokeralyona 4’e yakın değer alması da negatif
+#korelasyona işaret etmektedir.
+
+#Ayrıca Breusch-Godfrey Test’ide otokorelasyon durumununun tespiti için kullanılır.
+#Burada H0 hipotezi hatalar arasında korelasyon yoktur şeklinde kurulur.
+
+
+```{r}
+library(lmtest)
+model3 <- lm(Weight~Age+BMI+L1.4+
+             URIC,data=trainsetrem)
+lmtest::bgtest(model3, order = 3)
+```
+
+#Dolayısıyla sonuç incelendiğinde pvalue değerlendirildiğinde H0 hipotezi red edilemez.
+#Yani hatalar arasında korelasyon olmadığı görülür.Burda model derecesi 
+#değiştirilerek daha yüksek derecen farklarda incelenebilir.
+
+
+                           #AŞAMALI REGRESYON
+#Regresyon modeli oluştururken amacımız bağımsız değişkenleri en iyi şekilde
+#seçmektir.Aşamalı regresyon (Stepwise regression) yönteminde değişkenler 
+#belirli bir sistematikle çıkartılarak ya da eklenerek farklı regresyon modelleri
+#oluşturulup o modeller arasından en iyisini seçmemizi sağlayan yöntemlerdendir.
+
+#Aşamalı regresyon yöntemlerinden ;  Forward: tek tek modele değişken ekler, 
+#Bacward: full modelden tek tek değişken çıkararak işlem yapar.
+
+
+```{r}
+model2<-lm(Weight~Age+BMI+URIC+
+            L1.4,data=trainset)
+step(lm(Weight~1, data=trainsetrem),direction = "forward",
+     scope = ~Age+BMI+URIC+L1.4)
+```
+
+#1 modelin sabit ile başlayacağını, direction hangi yönde stepwise yapılacağını, 
+#scope ise max hangi değişkenler deneneceğini belirtir.
+
+#Elde edilen sonuçlar değerlendirildiğinde Start:AIC=1652.63 bu modelde sadece
+#sabit terim var; ikinci aşamada modele ek olarak teker teker değişkenler eklenip 
+#modelin AIC değeri değerlendiriliyor, ve hangi değişkenin modele katkısı daha fazla
+#kannatine AIC değeri en düşük olan alınarak karar veriliyor.
+
+
+
+# Bu örnek de BMI değişkeni min(AIC) değerine sahip onu modele alarak bir diğer adıma
+#geçilir.Sonra AIC değikeninin dahil olduğu model min AIC değerine sahip olduğundan bu
+#değişkende modele eklenerek bir diğer adıma gidilir. Bu şekilde tüm değişkenler denenerek
+#nihai modele karar verilir. Burada herhangi bir adımda herhangi bir değişken eklenmesi
+#modelin AIC değerini düşürürse o değişken modele dahil edilmez.örn:
+
+
+```{r}
+step(lm(Weight~1, data=bone11_Imp),direction = "forward",
+     scope = ~BMI+Age+L1.4+URIC+ALT)
+    
+
+```
+
+#Bu örnekte olduğu gibi ALT değişkeninin modele eklenmesi ile AIC değeri artmıştır
+#dolayısıyla nihai model içerisinde bu değişken yer almamaktadır.
+
+#Şimdi backward yöntemini incelersek;
+
+```{r}
+step(lm(Weight~Age+BMI+URIC+
+            ALT, data=trainsetrem))
+```
+
+
+#Görüldüğü gibi ALT değişkeni çıktıktan sonra model AIC değeri daha da düştüğü
+#için nihai model Weight+Age+BMI+URIC değişkenlerinden oluşuyor. 
+#Buradaki − işaretleri modelden değişken çıkarmayı gösterirken + olanlar değişken 
+#eklendiği durumu göstermektedir.
+
+#Üçüncü yöntemi de bothside çalıştırırsak;
+
+```{r}
+step(lm(Weight~1, data=trainsetrem),direction = "both",
+     scope = ~Age+BMI+L1.4+
+            URIC+ALT)
+```
+
+#Bu yöntemde de iki yönlü işlem yapılıyor hem ekleme hemde çıkarma yapmak mümkün 
+#her iki şekilde de değerlendirerek min AIC değerine sahip modeli bulmamızı sağlıyor. 
+
+#Aynı diğer iki yöntem sonuçları bu aşamada da nihai model olarak karşımıza
+#çıkmakta. Weight Age+BMI+L1.4+URIC+ALT
+
+
+
+
+                            #VARSAYIM KONTROLLERİ 
+
+```{r}
+install.packages("faraway")
+library(faraway)
+```
+
+```{r}
+data("bone")
+View(bone)
+```
+#İnceleyeceğimiz veri seti,"Serum Ürik Asit düzeyleri ile Osteoporoz riski arasındaki
+#Doğrusal Olmayan İlişki: Retrospektif Bir Çalışma" adlı makalenin orijinal verileridir
+#ve klinik taban çizgisi verileri ve çift enerjili X-ışını ölçüm sonuçları içerir.
+
+#Veri setimizi incelediğimizde sırayla cinsiyet,yaş,boy,ağırlık,BMI(vücut kütle endeksi),
+#L1.L4(kemik yoğunluğu),CREA(keratin),birçok vitamin ve laboratuvar terimlerinin
+#değişkenleri yer almaktadır.
+
+2022yılında yukarıda bahsedilen verileri içeren bir data olmakla beraber 1537 gözlem 
+ve 40 değişkenden oluşmaktadır.
+```{r}
+summary(bone)
+```
+
+```{r}
+length(bone$Gender)
+```
+#Veriler ile oluşturulabilecek doğrusal regresyon modeli Height değişkeninin 
+#diğer değişkenlerden etkilenebileceği düşünülerek oluşturulursa;
+
+```{r}
+model<-lm(Height~.-Age,data=bone)
+summary(model)
+```
+
+
+# HATALARIN DAĞILIMI NORMAL Mİ ?
+
+```{r}
+qqnorm(residuals(model),ylab="residuals",main="Model QQPLOT",col="darkseagreen4",col.main="blue",font.lab=1.5,col.lab="darkslategray",col.axis="darkslategray")
+qqline(residuals(model),col="red")
+```
+
+#Birinci ve üçüncü çeyrekleri birleştiren bir çizgi ekler. Artık değerlerden
+#etkilenmez.Normal artıklar çizgiyi yaklaşık olarak takip etmelidir. Görüldüğü 
+#üzere artıklar normal dağılımdan biraz sarkmıştır. 
+
+#Histogram normalliğin sınanması için çok uygun bir tespit edici değildir.
+#Sınıf sayısı ve sınıf aralığı seçimine göre değişkenlik gösterebilir.
+
+```{r}
+hist(residuals(model),xlab="Residuals",main="")
+```
+
+#Modelimiz sola yatık şekildedir.
+
+
+```{r}
+plot(density(residuals(model),na.rm = T),main="Model Yogunluk Grafigi",col="darkgoldenrod4",col.main="darkgoldenrod3")
+```
+
+
+
+```{r}
+install.packages("olsrr")
+library(olsrr)
+```
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

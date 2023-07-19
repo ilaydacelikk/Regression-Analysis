@@ -29,7 +29,7 @@ On the data set, respectively;
 
 
 
-<img align="left"  width="400" height="300" src="https://github.com/ilaydacelikk/Regression-Analysis-/assets/139812573/c629abeb-bfd8-4f94-96dd-6239300ebb29">
+<img align="left"  width="350" height="280" src="https://github.com/ilaydacelikk/Regression-Analysis-/assets/139812573/c629abeb-bfd8-4f94-96dd-6239300ebb29">
 
 
 
